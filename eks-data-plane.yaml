@@ -1,0 +1,273 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to create an EKS Data Plane (EKS Node Group along with an underlying Launch Template) and associated resources (Node IAM Role).
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Node Group configuration
+      Parameters:
+      - EnvironmentName
+      - KubernetesVersionNumber
+      - BuildNumber
+      - NodeGroupName
+    - Label:
+        default: Node Group compute (Launch Template) configuration - General 
+      Parameters:
+      - AmiId
+      - CapacityType
+      - InstanceType
+      - KeyPair
+    - Label:
+        default: Node Group compute (Launch Template) configuration - EBS volume
+      Parameters:
+      - DeviceName
+      - VolumeSize
+      - VolumeType
+    - Label:
+        default: Node Group network configuration
+      Parameters:
+      - Subnets
+    - Label:
+        default: Node Group scaling configuration
+      Parameters:
+      - MinSize
+      - MaxSize
+      - DesiredSize
+    - Label:
+        default: Additional Kubernetes labels
+      Parameters:
+      - AdditionalLabels
+    - Label:
+        default: Kubernetes taints
+      Parameters:
+      - TaintKey
+      - TaintValue
+      - TaintEffect
+    - Label:
+        default: Advanced details
+      Parameters:
+      - BootstrapArguments
+      - EnableCpuCfsQuota
+      - TlsCipherSuite
+      - HttpTokenState
+    - Label:
+        default: Additional Worker Node tags
+      Parameters:
+      - AdditionalTags
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Enter the Environment Name (e.g. my-test) matching the existing Cluster's environment name. This will also be added as Kubernetes label to Nodes.
+
+  KubernetesVersionNumber:
+    Type: Number
+    Description: The Kubernetes version number of your Cluster without dot (.). This is used only for naming the Node Group.
+    
+  BuildNumber:
+    Type: Number
+    Description: The Node Group build number. This is used only for naming the Node Group.
+    
+  NodeGroupName:
+    Type: String
+    Description: Enter the Node Group Name (e.g. dmp). Ideally, it will match with the Product Group name.
+
+  AmiId:
+    Type: String
+    Description: Amazon machine image (AMI) ID.
+
+  CapacityType:
+    Type: String
+    Description: Select the capacity purchase option (ON_DEMAND or SPOT) for this Node Group.
+    AllowedValues:
+    - ON_DEMAND
+    - SPOT
+
+  InstanceType:
+    Type: String
+    Description: Select an instance type that meets your computing, memory, networking, or storage needs.
+
+  KeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The EC2 Key Pair to allow SSH access to the instances.
+
+  DeviceName:
+    Type: String
+    Description: The block device driver for the instance assigns the actual volume name when mounting the EBS volume.
+    Default: /dev/xvda
+
+  VolumeSize:
+    Type: Number
+    Description: Volume size (in GB) must be greater than zero. Provisioned IOPS SSD volumes must be at least 4 GiB in size.
+    Default: 20
+
+  VolumeType:
+    Type: String
+    Description: EBS volume type (e.g. gp2 for General Purpose SSD).
+  
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Specify the subnets in your VPC where your nodes will run.
+
+  MinSize:
+    Type: Number
+    Description: Set the minimum number of nodes that the group can scale in to.
+    
+  MaxSize:
+    Type: Number
+    Description: Set the maximum number of nodes that the group can scale out to.
+
+  DesiredSize:
+    Type: Number
+    Description: Set the desired number of nodes that the group should launch with initially.
+
+  AdditionalLabels:
+    Type: String
+    Description: "(Optional) You can apply additional Kubernetes labels to worker nodes. Enter the label key-value pairs in the format: key1=value1,key2=value2."
+    Default: ""
+
+  TaintKey:
+    Type: String
+    Description: (Optional) Enter Taint key.
+    Default: ""
+
+  TaintValue:
+    Type: String
+    Description: (Optional) Enter Taint value.
+    Default: ""
+
+  TaintEffect:
+    Type: String
+    Description: (Optional) Select Taint effect (NO_EXECUTE, NO_SCHEDULE or PREFER_NO_SCHEDULE).
+    AllowedValues:
+      - NO_EXECUTE
+      - NO_SCHEDULE
+      - PREFER_NO_SCHEDULE
+    Default: NO_SCHEDULE
+
+  BootstrapArguments:
+    Type: String
+    Description: (Optional) Arguments to pass to the bootstrap script. See files/bootstrap.sh in https://github.com/awslabs/amazon-eks-ami.
+    Default: ""
+
+  EnableCpuCfsQuota:
+    Type: String
+    Description: Enable CPU CFS quota enforcement for containers that specify CPU limits.
+    AllowedValues:
+    - true
+    - false
+
+  TlsCipherSuite:
+    Type: String
+    Description: Comma-separated list of cipher suites for the server. If omitted, the default Go cipher suites will be used.
+    Default: --tls-cipher-suites=TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_128_GCM_SHA256
+
+  HttpTokenState:
+    Type: String
+    Description: The state of token usage for your instance metadata requests. You can run V1 and V2 (select 'optional'), or just V2 (select 'required') which disables IMDSv1. 
+    AllowedValues:
+    - required
+    - optional
+
+  AdditionalTags:
+    Type: String
+    Description: "(Optional) You can apply additional EC2 tags to worker nodes. Enter the tag key-value pairs in the format: key1=value1,key2=value2."
+    Default: ""
+
+Conditions:
+  IsAdditionalLabelPresent: !Not [!Equals [!Ref AdditionalLabels, ""]]
+  IsAdditionalTagPresent: !Not [!Equals [!Ref AdditionalTags, ""]]
+
+Resources:
+  NodeIamRoleStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-data-plane/eks-node-iam-role.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        KubernetesVersionNumber: !Ref KubernetesVersionNumber
+        BuildNumber: !Ref BuildNumber
+        NodeGroupName: !Ref NodeGroupName
+
+  RegisterNodeIamRoleStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-data-plane/register-node-iam-role.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        KubernetesVersionNumber: !Ref KubernetesVersionNumber
+        BuildNumber: !Ref BuildNumber
+        NodeGroupName: !Ref NodeGroupName
+    DependsOn:
+    - NodeIamRoleStack
+
+  NodeGroupStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-data-plane/eks-node-group.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        KubernetesVersionNumber: !Ref KubernetesVersionNumber
+        BuildNumber: !Ref BuildNumber
+        NodeGroupName: !Ref NodeGroupName
+        AmiId: !Ref AmiId
+        CapacityType: !Ref CapacityType
+        InstanceType: !Ref InstanceType
+        KeyPair: !Ref KeyPair
+        DeviceName: !Ref DeviceName
+        VolumeSize: !Ref VolumeSize
+        VolumeType: !Ref VolumeType
+        Subnets: !Join
+        - ","
+        - !Ref Subnets
+        MinSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
+        DesiredSize: !Ref DesiredSize
+        TaintKey: !Ref TaintKey
+        TaintValue: !Ref TaintValue
+        TaintEffect: !Ref TaintEffect
+        BootstrapArguments: !Ref BootstrapArguments
+        EnableCpuCfsQuota: !Ref EnableCpuCfsQuota
+        TlsCipherSuite: !Ref TlsCipherSuite
+        HttpTokenState: !Ref HttpTokenState
+    DependsOn:
+    - RegisterNodeIamRoleStack
+
+  AddAdditionalLabelsStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: IsAdditionalLabelPresent
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-data-plane/add-additional-labels.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        KubernetesVersionNumber: !Ref KubernetesVersionNumber
+        BuildNumber: !Ref BuildNumber
+        NodeGroupName: !Ref NodeGroupName
+        AdditionalLabels: !Ref AdditionalLabels
+    DependsOn:
+    - NodeGroupStack
+
+  AddAdditionalTagsStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: IsAdditionalTagPresent
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-data-plane/add-additional-tags.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        KubernetesVersionNumber: !Ref KubernetesVersionNumber
+        BuildNumber: !Ref BuildNumber
+        NodeGroupName: !Ref NodeGroupName
+        AdditionalTags: !Ref AdditionalTags
+    DependsOn:
+    - NodeGroupStack

@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to create a Launch Template and an EKS Node Group 
+
+Parameters:
+  EnvironmentName:
+    Type: String
+  
+  KubernetesVersionNumber:
+    Type: Number
+
+  BuildNumber:
+    Type: Number
+
+  NodeGroupName:
+    Type: String
+
+  AmiId:
+    Type: String
+
+  CapacityType:
+    Type: String
+
+  InstanceType:
+    Type: String
+
+  KeyPair:
+    Type: String
+
+  DeviceName:
+    Type: String
+
+  VolumeSize:
+    Type: Number
+
+  VolumeType:
+    Type: String
+
+  Subnets:
+    Type: CommaDelimitedList
+
+  MinSize:
+    Type: Number
+    
+  MaxSize:
+    Type: Number
+
+  DesiredSize:
+    Type: Number
+
+  TaintKey:
+    Type: String
+
+  TaintValue:
+    Type: String
+
+  TaintEffect:
+    Type: String
+
+  BootstrapArguments:
+    Type: String
+
+  EnableCpuCfsQuota:
+    Type: String
+
+  TlsCipherSuite:
+    Type: String
+
+  HttpTokenState:
+    Type: String
+
+Conditions:
+  IsKeyPresent: !Not [!Equals [!Ref KeyPair, ""]]
+  IsTaintPresent: !Not [!Equals [!Ref TaintKey, ""]]
+
+Resources:
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub ${EnvironmentName}-EKS-${KubernetesVersionNumber}-${BuildNumber}-${NodeGroupName}-LaunchTemplate
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref InstanceType
+        KeyName: !If
+        - IsKeyPresent
+        - !Ref KeyPair
+        - !Ref AWS::NoValue
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub ${EnvironmentName}-EKS-NodeSecurityGroupId
+        BlockDeviceMappings:
+        - DeviceName: !Ref DeviceName
+          Ebs:
+            VolumeSize: !Ref VolumeSize
+            VolumeType: !Ref VolumeType
+            DeleteOnTermination: true
+            Encrypted: true
+        TagSpecifications:
+        - ResourceType: instance
+          Tags:
+          - Key: environmentName
+            Value: !Ref EnvironmentName
+
+        UserData:
+          Fn::Base64: !Sub |
+              #!/bin/bash -xe
+              /etc/eks/bootstrap.sh ${EnvironmentName}-${AWS::Region}-EKS-Cluster ${BootstrapArguments} --kubelet-extra-args '--cluster-dns=169.254.20.10 --cpu-cfs-quota=${EnableCpuCfsQuota} --enforce-node-allocatable=pods \
+              --eviction-hard=memory.available<100Mi,nodefs.available<10%,nodefs.inodesFree<5%,imagefs.available<10%,imagefs.inodesFree<5% \
+              --kube-reserved=cpu=500m,ephemeral-storage=1Gi,memory=500Mi --system-reserved-cgroup=/system.slice --read-only-port=10255 --kube-reserved-cgroup=/kube.slice \
+              --system-reserved=cpu=500m,ephemeral-storage=1Gi,memory=500Mi --anonymous-auth=false --streaming-connection-idle-timeout=5m --protect-kernel-defaults=true \
+              --event-qps=0 --config /etc/kubernetes/kubelet/kubelet-config.json \
+              ${TlsCipherSuite}'
+
+        MetadataOptions:
+          HttpPutResponseHopLimit: 2
+          HttpEndpoint: enabled
+          HttpTokens: !Ref HttpTokenState
+
+  NodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      NodegroupName: !Sub ${EnvironmentName}-EKS-${KubernetesVersionNumber}-${BuildNumber}-${NodeGroupName}
+      CapacityType: !Ref CapacityType
+      NodeRole:
+        Fn::ImportValue: !Sub ${EnvironmentName}-EKS-${KubernetesVersionNumber}-${BuildNumber}-${NodeGroupName}-NodeIAMRoleArn
+      LaunchTemplate:
+        Id: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      Subnets: !Ref Subnets
+      ScalingConfig:
+        MinSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
+        DesiredSize: !Ref DesiredSize
+      ClusterName: !Sub ${EnvironmentName}-${AWS::Region}-EKS-Cluster
+      Labels: 
+        environmentName: !Ref EnvironmentName
+      Taints: !If
+      - IsTaintPresent
+      - - Key: !Ref TaintKey
+          Value: !Ref TaintValue
+          Effect: !Ref TaintEffect
+      - !Ref AWS::NoValue

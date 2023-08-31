@@ -1,0 +1,125 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to create the EKS Factory solution components - Service Catalog portfolio and products.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Repository configuration
+      Parameters:
+      - S3RepositoryPath
+    - Label:
+        default: Portfolio configuration
+      Parameters:
+      - Owner
+      - Users
+      
+Parameters:
+  S3RepositoryPath:
+    Type: String
+    Description: "S3 repository bucket/folder path in the format: bucket/folder/sub-folder (without the slash at the begining/end)."
+    
+  Owner:
+    Type: String
+    Description: Enter portfolio owner details.
+
+  Users:
+    Type: String
+    Description: Enter ARN of the IAM user/group/role.
+
+Resources:
+  EKSFactoryServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub EKSFactory-${AWS::Region}-ServiceRole
+      Description: EKS Factory Service Role used by different services e.g. Service Catalog, CloudFormation, and CodeBuild for managing EKS environments.
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - cloudformation.amazonaws.com
+            - codebuild.amazonaws.com
+            - servicecatalog.amazonaws.com
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AdministratorAccess
+
+  EksFactoryPortfolio:
+    Type: AWS::ServiceCatalog::Portfolio
+    Properties: 
+      Description: Provision EKS Control Plane and Data Plane
+      DisplayName: EKS Factory
+      ProviderName: !Ref Owner
+
+  EksFactoryPortfolioPrincipalAssociation:
+    Type: AWS::ServiceCatalog::PortfolioPrincipalAssociation
+    Properties: 
+      PortfolioId: !Ref EksFactoryPortfolio
+      PrincipalType: IAM
+      PrincipalARN: !Ref Users
+
+  EksControlPlaneProduct:
+    Type: AWS::ServiceCatalog::CloudFormationProduct
+    Properties:
+      Name: EKS Control Plane
+      Description: Provision EKS Control Plane components (without worker node) such as Config Manager, Config Map Manager.
+      Owner: !Ref Owner
+      ProvisioningArtifactParameters:
+      - Name: New Cluster
+        Info: 
+          LoadTemplateFromURL: !Sub
+          - https://s3.amazonaws.com/${S3RepositoryPath}/eks-control-plane.yaml
+          - S3RepositoryPath: !Ref S3RepositoryPath
+
+  EksControlPlaneProductAssociation:
+    Type: AWS::ServiceCatalog::PortfolioProductAssociation
+    Properties:
+      PortfolioId: !Ref EksFactoryPortfolio
+      ProductId: !Ref EksControlPlaneProduct
+  
+  EksControlPlaneProductLaunchRoleConstraint:
+    Type: AWS::ServiceCatalog::LaunchRoleConstraint
+    Properties:
+      PortfolioId: !Ref EksFactoryPortfolio
+      ProductId: !Ref EksControlPlaneProduct 
+      RoleArn: !GetAtt EKSFactoryServiceRole.Arn
+
+  EksDataPlaneProduct:
+    Type: AWS::ServiceCatalog::CloudFormationProduct
+    Properties:
+      Name: EKS Data Plane
+      Description: Provision managed Node Group and other required resources such as Launch Template, Node IAM Role.
+      Owner: !Ref Owner
+      ProvisioningArtifactParameters:
+      - Name: New Node Group
+        Info: 
+          LoadTemplateFromURL: !Sub
+          - https://s3.amazonaws.com/${S3RepositoryPath}/eks-data-plane.yaml
+          - S3RepositoryPath: !Ref S3RepositoryPath
+
+  EksDataPlaneProductAssociation:
+    Type: AWS::ServiceCatalog::PortfolioProductAssociation
+    Properties:
+      PortfolioId: !Ref EksFactoryPortfolio
+      ProductId: !Ref EksDataPlaneProduct
+  
+  EksDataPlaneProductLaunchRoleConstraint:
+    Type: AWS::ServiceCatalog::LaunchRoleConstraint
+    Properties:
+      PortfolioId: !Ref EksFactoryPortfolio
+      ProductId: !Ref EksDataPlaneProduct 
+      RoleArn: !GetAtt EKSFactoryServiceRole.Arn
+
+Outputs:
+  EKSFactoryS3RepositoryPath:
+    Description: S3 repository bucket/folder path
+    Value: !Ref S3RepositoryPath
+    Export:
+      Name: EKSFactory-S3RepositoryPath
+
+  EKSFactoryServiceRoleArn:
+    Description: EKS Factory Service Role ARN
+    Value: !GetAtt EKSFactoryServiceRole.Arn
+    Export:
+      Name: EKSFactory-ServiceRoleArn

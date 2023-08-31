@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to add additional Kubernetes labels to the EKS Cluster Node Group
+
+Parameters:
+  EnvironmentName:
+    Type: String
+
+  KubernetesVersionNumber:
+    Type: Number
+
+  BuildNumber:
+    Type: Number
+
+  NodeGroupName:
+    Type: String
+
+  AdditionalLabels:
+    Type: String
+
+Resources:
+  AddAdditionalLabels:
+    Type: Custom::AddAdditionalLabels
+    Properties:
+      ServiceToken: 
+        Fn::ImportValue: !Sub ${EnvironmentName}-EKS-ConfigManagerArn
+      KubernetesVersionNumber: !Ref KubernetesVersionNumber
+      BuildNumber: !Ref BuildNumber
+      NodeGroupName: !Ref NodeGroupName
+      AdditionalLabels: !Ref AdditionalLabels
+
+Outputs:
+  OperationStatus:
+    Description: Add additional label operation status
+    Value: !GetAtt AddAdditionalLabels.Response

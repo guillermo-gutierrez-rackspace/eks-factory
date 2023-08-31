@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to create the EKS Add-ons
+
+Parameters:
+  EnvironmentName:
+    Type: String
+
+  VpcCniVersion:
+    Type: String
+    Default: ""
+
+  CoreDnsVersion:
+    Type: String
+    Default: ""
+
+  KubeProxyVersion:
+    Type: String
+    Default: ""
+
+Conditions:
+  IsVpcCniVersionPresent: !Not [!Equals [!Ref VpcCniVersion, ""]]
+  IsCoreDnsVersionPresent: !Not [!Equals [!Ref CoreDnsVersion, ""]]
+  IsKubeProxyVersionPresent: !Not [!Equals [!Ref KubeProxyVersion, ""]]
+
+Resources:
+  VpcCniAddon:
+    Type: AWS::EKS::Addon
+    Condition: IsVpcCniVersionPresent
+    Properties:
+      AddonName: vpc-cni
+#      AddonVersion: !Ref VpcCniVersion
+      ClusterName: !Sub ${EnvironmentName}-${AWS::Region}-EKS-Cluster
+  
+  CoreDnsAddon:
+    Type: AWS::EKS::Addon
+    Condition: IsCoreDnsVersionPresent
+    Properties:
+      AddonName: coredns
+#      AddonVersion: !Ref CoreDnsVersion
+      ClusterName: !Sub ${EnvironmentName}-${AWS::Region}-EKS-Cluster
+  
+  KubeProxyAddon:
+    Type: AWS::EKS::Addon
+    Condition: IsKubeProxyVersionPresent
+    Properties:
+      AddonName: kube-proxy
+#      AddonVersion: !Ref KubeProxyVersion
+      ClusterName: !Sub ${EnvironmentName}-${AWS::Region}-EKS-Cluster

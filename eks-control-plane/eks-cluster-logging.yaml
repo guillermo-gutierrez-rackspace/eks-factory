@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to configure logging in EKS Cluster
+
+Parameters:
+  EnvironmentName:
+    Type: String
+
+  ApiServerLogging:
+    Type: String
+  
+  AuditLogging:
+    Type: String
+
+  AuthenticatorLogging:
+    Type: String
+
+  ControllerManagerLogging:
+    Type: String
+
+  SchedulerLogging:
+    Type: String
+
+Resources:
+  ClusterLogging:
+    Type: Custom::ClusterLogging
+    Properties:
+      ServiceToken: 
+        Fn::ImportValue: !Sub ${EnvironmentName}-EKS-ConfigManagerArn
+      ClusterLogging: !Sub api=${ApiServerLogging},audit=${AuditLogging},authenticator=${AuthenticatorLogging},controllerManager=${ControllerManagerLogging},scheduler=${SchedulerLogging}
+
+Outputs:
+  LoggingStatus:
+    Description: Control Plane logging status
+    Value: !GetAtt ClusterLogging.Response

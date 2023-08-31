@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -x
+
+sed -e "s~AWSAccountID~$1~g" aws-auth.yml.template > aws-auth.yml
+
+cat aws-auth.yml
+
+kubectl apply -f aws-auth.yml

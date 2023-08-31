@@ -1,0 +1,28 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to create the EKS Config Map Manager CodeBuild project.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+
+  S3RepositoryPath:
+    Type: String
+
+Resources:
+  ConfigMapManager:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${EnvironmentName}-EKS-ConfigMapManager
+      Description: !Sub EKS Config Map Manager for '${EnvironmentName}' environment.
+      Source:
+        Type: S3
+        Location: !Sub ${S3RepositoryPath}/build-scripts/
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0	
+        ComputeType: BUILD_GENERAL1_SMALL
+      ServiceRole: 
+        Fn::ImportValue: EKSFactory-ServiceRoleArn
+      ConcurrentBuildLimit: 1
+      Artifacts:
+        Type: NO_ARTIFACTS

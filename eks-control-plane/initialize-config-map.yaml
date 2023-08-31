@@ -1,0 +1,19 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to initialize the Config Map with organization standard roles
+
+Parameters:
+  EnvironmentName:
+    Type: String
+
+Resources:
+  InitializeConfigMap:
+    Type: Custom::InitializeConfigMap
+    Properties:
+      ServiceToken:
+        Fn::ImportValue: !Sub ${EnvironmentName}-EKS-ConfigManagerArn
+      NodeIamRoleArn: ''
+
+Outputs:
+  InitializationStatus:
+    Description: Config Map initialization status
+    Value: !GetAtt InitializeConfigMap.Response

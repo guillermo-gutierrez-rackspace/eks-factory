@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to tag the EKS Cluster Node Group Auto Scaling Group
+
+Parameters:
+  EnvironmentName:
+    Type: String
+
+  KubernetesVersionNumber:
+    Type: Number
+
+  BuildNumber:
+    Type: Number
+
+  NodeGroupName:
+    Type: String
+
+  AdditionalTags:
+    Type: String
+
+Resources:
+  AddAdditionalTags:
+    Type: Custom::AddAdditionalTags
+    Properties:
+      ServiceToken: 
+        Fn::ImportValue: !Sub ${EnvironmentName}-EKS-ConfigManagerArn
+      KubernetesVersionNumber: !Ref KubernetesVersionNumber
+      BuildNumber: !Ref BuildNumber
+      NodeGroupName: !Ref NodeGroupName
+      AdditionalTags: !Ref AdditionalTags
+
+Outputs:
+  OperationStatus:
+    Description: Add additional tag operation status
+    Value: !GetAtt AddAdditionalTags.Response

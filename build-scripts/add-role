@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -x
+
+kubectl get -n kube-system configmap/aws-auth -o json > aws-auth.json
+
+cat aws-auth.json
+
+if cat aws-auth.json | grep -q "$1"; then
+    
+    echo "NodeIAMRole '$1' is already present in ConfigMap."
+
+else
+    
+    cat aws-auth.json | python add-role.py "$1" > aws-auth-patch.json
+    
+    kubectl patch configmap/aws-auth -n kube-system --patch "$(cat aws-auth-patch.json)"
+
+    echo "NodeIAMRole '$1' is added to ConfigMap."
+fi

@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to create the EKS Cluster and the required EKS Service Role
+
+Parameters:
+  EnvironmentName:
+    Type: String
+
+  KmsKeyArn:
+    Type: String
+
+  KubernetesVersion:
+    Type: String
+
+  Subnets:
+    Type: CommaDelimitedList
+  
+Resources:
+  ClusterServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-${AWS::Region}-EKS-ClusterServiceRole
+      Description: !Sub EKS Cluster Service Role for '${EnvironmentName}' environment in ${AWS::Region} region.
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+      Policies:
+      - PolicyName: DenyRevokeSecurityGroupRuleChange
+        PolicyDocument:
+          Statement:
+          - Action:
+            - ec2:RevokeSecurityGroupIngress
+            - ec2:RevokeSecurityGroupEgress
+            Resource: "*"
+            Effect: Deny
+      - PolicyName: kms
+        PolicyDocument:
+          Statement:
+          - Action: kms:*
+            Resource: !Ref KmsKeyArn
+            Effect: Allow
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: eks.amazonaws.com
+      Tags:
+      - Key: managed_by
+        Value: ML_Cloud_Infra_Services
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-${AWS::Region}-EKS-ClusterServiceRole
+
+  Cluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Sub ${EnvironmentName}-${AWS::Region}-EKS-Cluster
+      ResourcesVpcConfig:
+        SubnetIds: !Ref Subnets
+        SecurityGroupIds:
+        - Fn::ImportValue: !Sub ${EnvironmentName}-EKS-ClusterSecurityGroupId
+      RoleArn: !GetAtt ClusterServiceRole.Arn
+      Version: !Ref KubernetesVersion

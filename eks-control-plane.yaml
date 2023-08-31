@@ -1,0 +1,209 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to create an EKS Control Plane (without worker node) and associated resources (Cluster Service Role, Cluster Security Group and Node Security Group) for creating new EKS Cluster.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Cluster configuration
+      Parameters:
+      - EnvironmentName
+      - KubernetesVersion
+    - Label:
+        default: Secrets encryption
+      Parameters:
+      - KmsKeyArn
+    - Label:
+        default: Networking
+      Parameters:
+      - VpcId
+      - Subnets
+    - Label:
+        default: Networking add-ons
+      Parameters:
+      - VpcCniVersion
+      - CoreDnsVersion
+      - KubeProxyVersion
+    - Label:
+        default: Control Plane Logging
+      Parameters:
+      - ApiServerLogging
+      - AuditLogging
+      - AuthenticatorLogging
+      - ControllerManagerLogging
+      - SchedulerLogging
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Enter a unique Environment Name (e.g. my-test). All the provisioned resources (e.g. Cluster, IAM Roles, Node Groups etc.) in Control Plane and Data Plane will be prefixed with the Environment name.
+
+  KubernetesVersion:
+    Type: String
+    Description: The desired Kubernetes version for your Cluster.
+    
+  KmsKeyArn:
+    Type: String
+    Description: The ARN of the KMS key to use for envelope encryption of Kubernetes secrets.
+    
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Select a VPC to use for your EKS Cluster resources.
+
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Choose the subnets in your VPC where the control plane may place elastic network interfaces (ENIs) to facilitate communication with your cluster.
+
+  VpcCniVersion:
+    Type: String
+    Description: Enter Amazon VPC CNI add-on version. This add-on enables pod networking within your cluster.
+    Default: ""
+
+  CoreDnsVersion:
+    Type: String
+    Description: Enter CoreDNS add-on version. This add-on enables service discovery within your cluster.
+    Default: ""
+
+  KubeProxyVersion:
+    Type: String
+    Description: Enter kube-proxy add-on version. This add-on enables service networking within your cluster.
+    Default: ""
+
+  ApiServerLogging:
+    Type: String
+    Description: Logs pertaining to API requests to the cluster.
+    Default: enabled
+    AllowedValues:
+      - enabled
+      - disabled
+  
+  AuditLogging:
+    Type: String
+    Description: Logs pertaining to cluster access via the Kubernetes API.
+    Default: enabled
+    AllowedValues:
+      - enabled
+      - disabled
+
+  AuthenticatorLogging:
+    Type: String
+    Description: Logs pertaining to authentication requests into the cluster.
+    Default: enabled
+    AllowedValues:
+      - enabled
+      - disabled
+
+  ControllerManagerLogging:
+    Type: String
+    Description: Logs pertaining to state of cluster controllers.
+    Default: enabled
+    AllowedValues:
+      - enabled
+      - disabled
+
+  SchedulerLogging:
+    Type: String
+    Description: Logs pertaining to scheduling decisions.
+    Default: enabled
+    AllowedValues:
+      - enabled
+      - disabled
+
+Resources:
+  ConfigManagerStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-control-plane/eks-config-manager.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
+  SecurityGroupsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-control-plane/eks-security-groups.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcId: !Ref VpcId
+
+  ClusterStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-control-plane/eks-cluster.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        KmsKeyArn: !Ref KmsKeyArn
+        KubernetesVersion: !Ref KubernetesVersion
+        Subnets: !Join
+        - ","
+        - !Ref Subnets
+    DependsOn:
+    - ConfigManagerStack
+    - SecurityGroupsStack
+
+  AddonsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-control-plane/eks-add-ons.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcCniVersion: !Ref VpcCniVersion
+        CoreDnsVersion: !Ref CoreDnsVersion
+        KubeProxyVersion: !Ref KubeProxyVersion
+    DependsOn:
+    - ClusterStack
+
+  ClusterLoggingStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-control-plane/eks-cluster-logging.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        ApiServerLogging: !Ref ApiServerLogging
+        AuditLogging: !Ref AuditLogging
+        AuthenticatorLogging: !Ref AuthenticatorLogging
+        ControllerManagerLogging: !Ref ControllerManagerLogging
+        SchedulerLogging: !Ref SchedulerLogging
+    DependsOn:
+    - ClusterStack
+    - ConfigManagerStack
+
+  ConfigMapManagerStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-control-plane/eks-config-map-manager.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+
+  InitializeConfigMapStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 
+      - https://s3.amazonaws.com/${S3RepositoryPath}/eks-control-plane/initialize-config-map.yaml
+      - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+    DependsOn:
+    - ClusterStack
+    - ConfigManagerStack
+    - ConfigMapManagerStack
+
+Outputs:
+  NodeSecurityGroupId:
+    Description: Node Security Group ID
+    Value: !GetAtt SecurityGroupsStack.Outputs.NodeSecurityGroupId
+    Export:
+      Name: !Sub ${EnvironmentName}-EKS-NodeSecurityGroupId
+  

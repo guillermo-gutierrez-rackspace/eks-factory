@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to create the EKS Cluster Security Group and Node Security Group
+
+Parameters:
+  EnvironmentName:
+    Type: String
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+Resources:
+  ClusterSecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      ToPort: 65535
+      FromPort: 1025
+      GroupId: !Ref ClusterSecurityGroup
+      DestinationSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: "-1"
+  ClusterSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      ToPort: 443
+      FromPort: 443
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      GroupId: !Ref ClusterSecurityGroup
+      IpProtocol: tcp
+  ClusterSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvironmentName}-EKS-ClusterSecurityGroup
+      GroupDescription: !Sub EKS Cluster Security Group for '${EnvironmentName}' environment.
+      SecurityGroupIngress: []
+      VpcId: !Ref VpcId
+      SecurityGroupEgress: []
+      GroupDescription: EKS Cluster Security Group
+      Tags:
+      - Key: environmentName
+        Value: !Ref EnvironmentName
+      - Key: managed_by
+        Value: ML_Cloud_Infra_Services
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-EKS-ClusterSecurityGroup
+
+  NodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvironmentName}-EKS-NodeSecurityGroup
+      GroupDescription: !Sub EKS Node Security Group for '${EnvironmentName}' environment.
+      SecurityGroupIngress:
+      - ToPort: 65535
+        IpProtocol: tcp
+        SourceSecurityGroupId: !Ref ClusterSecurityGroup
+        FromPort: 1025
+      - ToPort: 443
+        IpProtocol: tcp
+        SourceSecurityGroupId: !Ref ClusterSecurityGroup
+        FromPort: 443
+      VpcId: !Ref VpcId
+      GroupDescription: EKS Node Security Group
+      Tags:
+      - Key: environmentName
+        Value: !Ref EnvironmentName
+      - Key: managed_by
+        Value: ML_Cloud_Infra_Services
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-EKS-NodeSecurityGroup
+  NodeSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      ToPort: 65535
+      FromPort: 0
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: "-1"
+
+Outputs:
+  ClusterSecurityGroupId:
+    Description: Cluster Security Group ID
+    Value: !GetAtt ClusterSecurityGroup.GroupId
+    Export:
+      Name: !Sub ${EnvironmentName}-EKS-ClusterSecurityGroupId
+
+  NodeSecurityGroupId:
+    Description: Node Security Group ID
+    Value: !GetAtt NodeSecurityGroup.GroupId
