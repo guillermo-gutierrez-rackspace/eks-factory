@@ -14,39 +14,39 @@ Resources:
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
-        - Effect: Allow
-          Action: sts:AssumeRole
-          Principal:
-            Service: lambda.amazonaws.com
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: lambda.amazonaws.com
       Path: /
       ManagedPolicyArns:
-      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-      - PolicyName: ec2-eks-iam-codebuild-asg
-        PolicyDocument:
-          Version: 2012-10-17
-          Statement:
-          - Effect: Allow
-            Action:
-            - ec2:CreateTags
-            - eks:UpdateClusterConfig
-            - eks:DescribeNodegroup
-            - eks:UpdateNodegroupConfig
-            - iam:GetRole
-            - iam:UpdateAssumeRolePolicy
-            - codebuild:StartBuild
-            - codebuild:BatchGetBuilds
-            - codebuild:ListBuildsForProject
-            - autoscaling:CreateOrUpdateTags
-            - autoscaling:DescribeAutoScalingGroups
-            Resource: "*"
-      - PolicyName: logs
-        PolicyDocument:
-          Version: 2012-10-17
-          Statement:
-            - Effect: Allow
-              Action: logs:*
-              Resource: arn:aws:logs:*:*:*
+        - PolicyName: ec2-eks-iam-codebuild-asg
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:CreateTags
+                  - eks:UpdateClusterConfig
+                  - eks:DescribeNodegroup
+                  - eks:UpdateNodegroupConfig
+                  - iam:GetRole
+                  - iam:UpdateAssumeRolePolicy
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                  - codebuild:ListBuildsForProject
+                  - autoscaling:CreateOrUpdateTags
+                  - autoscaling:DescribeAutoScalingGroups
+                Resource: "*"
+        - PolicyName: logs
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: logs:*
+                Resource: arn:aws:logs:*:*:*
 
   ConfigManager:
     Type: AWS::Lambda::Function
@@ -79,6 +79,63 @@ Resources:
           iam = boto3.client('iam')
           codebuild = boto3.client('codebuild')
           autoscaling = boto3.client('autoscaling')
+
+          def patch_coredns_to_work_on_fargate(event, context):
+            if event['RequestType'] == 'Create':
+              logger.info('Applying CoreDNS patch to work on fargate...')
+              command = 'patch-coredns-create'
+              args = ''
+            
+            elif event['RequestType'] == 'Delete':
+              logger.info('Removing CoreDNS patch to work on fargate...')
+              command = 'patch-coredns-delete'
+              args = ''
+
+            elif event['RequestType'] == 'Update':
+              return 'Request skipped.'
+
+            environment_name = os.getenv('ENVIRONMENT_NAME')
+
+            while True:
+              try:
+                response = codebuild.start_build(projectName = environment_name + '-EKS-ConfigMapManager', 
+                                  environmentVariablesOverride = [
+                                    {
+                                      'name': 'CLUSTER_NAME',
+                                      'value': os.getenv('CLUSTER_NAME'),
+                                      'type': 'PLAINTEXT'
+                                    },
+                                    {
+                                      'name': 'COMMAND',
+                                      'value': command,
+                                      'type': 'PLAINTEXT'
+                                    },
+                                    {
+                                      'name': 'ARGUMENTS',
+                                      'value': args,
+                                      'type': 'PLAINTEXT'
+                                    }],
+                                  timeoutInMinutesOverride = 5)
+                break
+              except ClientError as e:
+                if e.response['Error']['Code'] == 'AccountLimitExceededException':
+                  logger.info('Waiting for last build to finish...')
+                  time.sleep(10)
+                else:
+                  raise
+                                  
+            logger.info('Build started.')
+                            
+            while True:
+              status = codebuild.batch_get_builds(ids = [response['build']['id']])['builds'][0]['buildStatus']
+
+              if status == 'SUCCEEDED':
+                return 'Patch CoreDNS deployment to work on Fargate applied.'
+              elif status == 'IN_PROGRESS':
+                logger.info('Waiting for build to finish...')
+                time.sleep(10)
+              else:
+                raise Exception('Build ' + status + '.')
 
           def update_eks_cluster_logging(event, context):
             if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
@@ -144,7 +201,7 @@ Resources:
                   raise
                                   
             logger.info('Build started.')
-                             
+                            
             while True:
               status = codebuild.batch_get_builds(ids = [response['build']['id']])['builds'][0]['buildStatus']
 
@@ -213,6 +270,9 @@ Resources:
               elif 'AdditionalTags' in event['ResourceProperties']:
                 response['Response'] = add_additional_tags(event, context)
 
+              elif 'PatchCoreDnsToWorkOnFargate' in event['ResourceProperties']:
+                response['Response'] = patch_coredns_to_work_on_fargate(event, context)
+
               else:
                 raise Exception('Unknown event.')
 
@@ -231,7 +291,7 @@ Resources:
 
             else:
               logger.error('Unknown event.')
-              
+
       Timeout: 600
 
 Outputs:
