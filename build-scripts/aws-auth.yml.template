@@ -11,6 +11,10 @@ data:
       - system:masters
     - rolearn: arn:aws:iam::AWSAccountID:role/EKS-Users
       username: EKS-Users
+    - rolearn: arn:aws:iam::AWSAccountID:role/Rackspace
+      username: Rackspace
+      groups:
+      - system:masters
   mapUsers: |
     - userarn: arn:aws:iam::AWSAccountID:user/Audit-User
       username: audit-user
