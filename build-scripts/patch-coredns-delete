@@ -1,6 +1,0 @@
-#!/bin/bash
-
-set -x
-
-kubectl patch deployment coredns -n kube-system --type=json -p='[{"op": "add", "path": "/spec/template/metadata/annotations/eks.amazonaws.com~1compute-type", "value": "ec2"}]'
-kubectl rollout restart -n kube-system deployment coredns
