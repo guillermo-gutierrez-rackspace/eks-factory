@@ -217,7 +217,7 @@ Resources:
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
-        Subnets:  !Join
+        Subnets: !Join
         - ","
         - !Ref Subnets
         SecurityGroupId: !GetAtt SecurityGroupsStack.Outputs.NodeSecurityGroupId
@@ -243,3 +243,16 @@ Outputs:
     Export:
       Name: !Sub ${EnvironmentName}-EKS-NodeSecurityGroupId
   
+  ClusterVpcId:
+    Description: EKS Cluster VPC Id
+    Value: !Ref VpcId
+    Export:
+      Name: !Sub ${EnvironmentName}-EKS-VpcId
+
+  ClusterSubnets:
+    Description: EKS Cluster Subnets
+    Value: !Join
+        - ","
+        - !Ref Subnets
+    Export:
+      Name: !Sub ${EnvironmentName}-EKS-Subnets
