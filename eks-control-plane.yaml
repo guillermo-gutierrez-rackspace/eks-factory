@@ -9,6 +9,8 @@ Metadata:
       Parameters:
       - EnvironmentName
       - KubernetesVersion
+      - EndpointPublicAccess
+      - EndpointPrivateAccess
     - Label:
         default: Secrets encryption
       Parameters:
@@ -18,12 +20,13 @@ Metadata:
       Parameters:
       - VpcId
       - Subnets
-    - Label:
-        default: Networking add-ons
-      Parameters:
-      - VpcCniVersion
-      - CoreDnsVersion
-      - KubeProxyVersion
+      - ControlPlaneCidr
+#    - Label:
+#        default: Networking add-ons
+#      Parameters:
+#      - VpcCniVersion
+#      - CoreDnsVersion
+#      - KubeProxyVersion
     - Label:
         default: Control Plane Logging
       Parameters:
@@ -41,6 +44,22 @@ Parameters:
   KubernetesVersion:
     Type: String
     Description: The desired Kubernetes version for your Cluster.
+
+  EndpointPublicAccess:
+    Type: String
+    Description: Cluster API is accessible from the public network (Internet).
+    Default: false
+    AllowedValues:
+      - true
+      - false
+
+  EndpointPrivateAccess:
+    Type: String
+    Description: Cluster API is accessible from private network only.
+    Default: true
+    AllowedValues:
+      - true
+      - false
     
   KmsKeyArn:
     Type: String
@@ -54,20 +73,25 @@ Parameters:
     Type: List<AWS::EC2::Subnet::Id>
     Description: Choose the subnets in your VPC where the control plane may place elastic network interfaces (ENIs) to facilitate communication with your cluster.
 
-  VpcCniVersion:
+  ControlPlaneCidr:
     Type: String
-    Description: Enter Amazon VPC CNI add-on version. This add-on enables pod networking within your cluster.
+    Description: Enter Control Plane CIDR (10.110.0.0/16)
     Default: ""
 
-  CoreDnsVersion:
-    Type: String
-    Description: Enter CoreDNS add-on version. This add-on enables service discovery within your cluster.
-    Default: ""
-
-  KubeProxyVersion:
-    Type: String
-    Description: Enter kube-proxy add-on version. This add-on enables service networking within your cluster.
-    Default: ""
+#  VpcCniVersion:
+#    Type: String
+#    Description: Enter Amazon VPC CNI add-on version. This add-on enables pod networking within your cluster.
+#    Default: ""
+#
+#  CoreDnsVersion:
+#    Type: String
+#    Description: Enter CoreDNS add-on version. This add-on enables service discovery within your cluster.
+#    Default: ""
+#
+#  KubeProxyVersion:
+#    Type: String
+#    Description: Enter kube-proxy add-on version. This add-on enables service networking within your cluster.
+#    Default: ""
 
   ApiServerLogging:
     Type: String
@@ -118,6 +142,10 @@ Resources:
       - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
       Parameters:
         EnvironmentName: !Ref EnvironmentName
+        Subnets:  !Join
+        - ","
+        - !Ref Subnets
+        SecurityGroupId: !GetAtt SecurityGroupsStack.Outputs.NodeSecurityGroupId
 
   SecurityGroupsStack:
     Type: AWS::CloudFormation::Stack
@@ -139,9 +167,12 @@ Resources:
         EnvironmentName: !Ref EnvironmentName
         KmsKeyArn: !Ref KmsKeyArn
         KubernetesVersion: !Ref KubernetesVersion
+        EndpointPublicAccess: !Ref EndpointPublicAccess
+        EndpointPrivateAccess: !Ref EndpointPrivateAccess
         Subnets: !Join
         - ","
         - !Ref Subnets
+        ControlPlaneCidr: !Ref ControlPlaneCidr
     DependsOn:
     - ConfigManagerStack
     - SecurityGroupsStack
@@ -154,9 +185,9 @@ Resources:
       - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
       Parameters:
         EnvironmentName: !Ref EnvironmentName
-        VpcCniVersion: !Ref VpcCniVersion
-        CoreDnsVersion: !Ref CoreDnsVersion
-        KubeProxyVersion: !Ref KubeProxyVersion
+#        VpcCniVersion: !Ref VpcCniVersion
+#        CoreDnsVersion: !Ref CoreDnsVersion
+#        KubeProxyVersion: !Ref KubeProxyVersion
     DependsOn:
     - ClusterStack
 
@@ -186,6 +217,11 @@ Resources:
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
+        Subnets:  !Join
+        - ","
+        - !Ref Subnets
+        SecurityGroupId: !GetAtt SecurityGroupsStack.Outputs.NodeSecurityGroupId
+        VpcId: !Ref VpcId
 
   InitializeConfigMapStack:
     Type: AWS::CloudFormation::Stack
