@@ -8,6 +8,15 @@ Parameters:
   S3RepositoryPath:
     Type: String
 
+  Subnets:
+    Type: CommaDelimitedList
+
+  SecurityGroupId:
+    Type: String
+
+  VpcId:
+    Type: String
+
 Resources:
   ConfigMapManager:
     Type: AWS::CodeBuild::Project
@@ -26,3 +35,8 @@ Resources:
       ConcurrentBuildLimit: 1
       Artifacts:
         Type: NO_ARTIFACTS
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        Subnets: !Ref Subnets
+        VpcId: !Ref VpcId

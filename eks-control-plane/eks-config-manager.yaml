@@ -5,6 +5,12 @@ Parameters:
   EnvironmentName:
     Type: String
 
+  Subnets:
+    Type: CommaDelimitedList
+
+  SecurityGroupId:
+    Type: String
+
 Resources:
   ConfigManagerRole:
     Type: AWS::IAM::Role
@@ -14,39 +20,39 @@ Resources:
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
-        - Effect: Allow
-          Action: sts:AssumeRole
-          Principal:
-            Service: lambda.amazonaws.com
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: lambda.amazonaws.com
       Path: /
       ManagedPolicyArns:
-      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-      - PolicyName: ec2-eks-iam-codebuild-asg
-        PolicyDocument:
-          Version: 2012-10-17
-          Statement:
-          - Effect: Allow
-            Action:
-            - ec2:CreateTags
-            - eks:UpdateClusterConfig
-            - eks:DescribeNodegroup
-            - eks:UpdateNodegroupConfig
-            - iam:GetRole
-            - iam:UpdateAssumeRolePolicy
-            - codebuild:StartBuild
-            - codebuild:BatchGetBuilds
-            - codebuild:ListBuildsForProject
-            - autoscaling:CreateOrUpdateTags
-            - autoscaling:DescribeAutoScalingGroups
-            Resource: "*"
-      - PolicyName: logs
-        PolicyDocument:
-          Version: 2012-10-17
-          Statement:
-            - Effect: Allow
-              Action: logs:*
-              Resource: arn:aws:logs:*:*:*
+        - PolicyName: ec2-eks-iam-codebuild-asg
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:CreateTags
+                  - eks:UpdateClusterConfig
+                  - eks:DescribeNodegroup
+                  - eks:UpdateNodegroupConfig
+                  - iam:GetRole
+                  - iam:UpdateAssumeRolePolicy
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                  - codebuild:ListBuildsForProject
+                  - autoscaling:CreateOrUpdateTags
+                  - autoscaling:DescribeAutoScalingGroups
+                Resource: "*"
+        - PolicyName: logs
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: logs:*
+                Resource: arn:aws:logs:*:*:*
 
   ConfigManager:
     Type: AWS::Lambda::Function
@@ -144,7 +150,7 @@ Resources:
                   raise
                                   
             logger.info('Build started.')
-                             
+                            
             while True:
               status = codebuild.batch_get_builds(ids = [response['build']['id']])['builds'][0]['buildStatus']
 
@@ -231,7 +237,7 @@ Resources:
 
             else:
               logger.error('Unknown event.')
-              
+
       Timeout: 600
 
 Outputs:

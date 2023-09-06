@@ -11,8 +11,27 @@ Parameters:
   KubernetesVersion:
     Type: String
 
+  EndpointPublicAccess:
+    Type: String
+    Description: Cluster API is accessible from the public network (Internet).
+    Default: false
+    AllowedValues:
+      - true
+      - false
+
+  EndpointPrivateAccess:
+    Type: String
+    Description: Cluster API is accessible from private network only.
+    Default: true
+    AllowedValues:
+      - true
+      - false
+
   Subnets:
     Type: CommaDelimitedList
+
+  ControlPlaneCidr:
+    Type: String
   
 Resources:
   ClusterServiceRole:
@@ -54,9 +73,37 @@ Resources:
     Type: AWS::EKS::Cluster
     Properties:
       Name: !Sub ${EnvironmentName}-${AWS::Region}-EKS-Cluster
+      Version: !Ref KubernetesVersion
+      RoleArn: !GetAtt ClusterServiceRole.Arn
+      EncryptionConfig:
+        - Provider:
+            KeyArn:
+              !Ref KmsKeyArn
+          Resources:
+          - secrets
+      KubernetesNetworkConfig:
+        ServiceIpv4Cidr: !Ref ControlPlaneCidr
       ResourcesVpcConfig:
         SubnetIds: !Ref Subnets
         SecurityGroupIds:
         - Fn::ImportValue: !Sub ${EnvironmentName}-EKS-ClusterSecurityGroupId
-      RoleArn: !GetAtt ClusterServiceRole.Arn
-      Version: !Ref KubernetesVersion
+        EndpointPublicAccess: !Ref EndpointPublicAccess
+        EndpointPrivateAccess: !Ref EndpointPrivateAccess
+
+  OidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    DependsOn:
+      - Cluster
+    Properties:
+      Url: !GetAtt Cluster.OpenIdConnectIssuerUrl
+      ThumbprintList:
+        - 9e99a48a9960b14926bb7f3b02e22da2b0ab7280
+      ClientIdList:
+        - sts.amazonaws.com
+
+Outputs:
+  AmxControlPlaneOpenIdConnectIssuerUrl:
+    Description: 'EKS Control Plane Issue URL'
+    Value: !Select [1, !Split ["https://", !GetAtt Cluster.OpenIdConnectIssuerUrl]]
+    Export:
+      Name: !Sub ${EnvironmentName}-EKS-OidcProvider

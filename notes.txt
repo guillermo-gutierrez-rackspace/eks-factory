@@ -1,2 +1,28 @@
-It is necessary to use an EKS Optimized AMI
+
+# Command line used
+# Adjust e-mail as needed
+./install.sh template-bucket-us-east-1-766819176966 guillermo.gutierrez@rackspace.com arn:aws:iam::766819176966:role/Rackspace
+
+For managed node, it is necessary to use an EKS Optimized AMI
 1.24 - ami-0cbbb5a8c6f670bb6
+1.27 - ami-013895b64fa9cbcba
+
+IMPORTANT:
+- Instance size: t3.small   <- minimum otherwise won't start
+
+If accessing through EC2 instance
+
+1. Add the following role to aws-auth.yml.template
+
+    - rolearn: arn:aws:iam::766819176966:role/Rackspace
+      username: Rackspace
+      groups:
+      - system:masters
+
+2. Deploy Cluster Control Plane
+
+3. Copy your user credentials and paste on ec2 instance session
+
+3. Update kubeconfig
+
+   aws eks update-kubeconfig --region us-east-1 --name DE-us-east-1-EKS-Cluster
