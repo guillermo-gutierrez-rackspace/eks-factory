@@ -142,7 +142,7 @@ Resources:
       - S3RepositoryPath: !ImportValue EKSFactory-S3RepositoryPath
       Parameters:
         EnvironmentName: !Ref EnvironmentName
-        Subnets:  !Join
+        Subnets: !Join
         - ","
         - !Ref Subnets
         SecurityGroupId: !GetAtt SecurityGroupsStack.Outputs.NodeSecurityGroupId
